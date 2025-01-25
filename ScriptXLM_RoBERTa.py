@@ -110,11 +110,20 @@ def predict_with_top_5_words_and_sentences(text):
         word_attention_scores = cls_attention_scores[0].cpu().numpy()
         word_attention_pairs = [
             (token, score) for token, score in zip(input_tokens, word_attention_scores) 
-            if token not in ["<s>", "</s>", "<pad>"] and not any(char.isdigit() for char in token)
+            if token not in ["<s>", "</s>", "<pad>", ".", ",", "(", ")", "!", "?"] and not any(char.isdigit() for char in token)
         ]
         
+        # Combine tokens with the same word (case insensitive)
+        word_attention_dict = {}
+        for token, score in word_attention_pairs:
+            token_lower = token.lower()
+            if token_lower in word_attention_dict:
+                word_attention_dict[token_lower] += score
+            else:
+                word_attention_dict[token_lower] = score
+        
         # Sort words by attention score
-        top_5_words = sorted(word_attention_pairs, key=lambda x: x[1], reverse=True)[:5]
+        top_5_words = sorted(word_attention_dict.items(), key=lambda x: x[1], reverse=True)[:5]
 
         # Normalize word_attention_scores so they sum to 1
         total_word_attention = sum(score for _, score in top_5_words)
