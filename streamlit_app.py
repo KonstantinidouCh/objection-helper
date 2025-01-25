@@ -23,27 +23,6 @@ def hide_streamlit_menu_footer():
         unsafe_allow_html=True
     )
 
-def style_buttons():
-    st.markdown(
-        """
-        <style>
-        .red-button {
-            background-color: #ff4b4b !important;
-            color: white !important;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        .green-button {
-            background-color: #28a745 !important;
-            color: white !important;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
 # Example usage
 def landing_page():
     col1, col2 = st.columns([3, 1])
@@ -51,13 +30,14 @@ def landing_page():
         st.title("Objection Helper")
         st.markdown("Welcome to the Objection Helper. Click start to proceed.")
     with col2:
-        st.image("images/GASD_1.png", use_container_width=True)  # Use the correct parameter
+        st.image("images/GASD_1.png")
     
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         # Using a green button for Start
         if st.button("Start", key="start_button", help="Click to start the process", use_container_width=True):
             st.session_state.page = "Submit Information"  # Set the session state to navigate to the second page
+            st.rerun()  # Force rerun after updating session state
 
 def submit_information_page():
     st.title("Submit Information")
@@ -88,20 +68,25 @@ def submit_information_page():
             objection_input = st.text_area("Objection*", value=st.session_state.objection_input, key="objection_input")
             
         with col2:
-            st.image("images/GASD_1.png", use_container_width=True)
+            st.image("images/GASD_1.png")
         
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Quit", key="quit_button", use_container_width=True):
                 st.session_state.page = "Landing"
+                st.rerun()  # Force rerun after updating session state
         with col2:
             if st.button("Proceed", key="proceed_button", use_container_width=True):
                 if objection_input:  # Ensure there is input before proceeding
                     prediction = predict_with_loaded_model(objection_input)
                     st.session_state.result = prediction
                     st.session_state.page = "Result"
+                    st.rerun()
                 else:
                     st.error("Please enter the objection details before proceeding.")
+
+# ...existing code...
 
 # Function to compute highlighted objection
 def compute_highlighted_objection(top_3_sentences):
@@ -133,8 +118,6 @@ def result_page():
     if 'top_5_words' not in st.session_state:
         st.session_state.top_5_words = top_5_words
 
-
-
     # Label mapping
     label_text = label_map.get(dictum_prediction, "Unknown")
     
@@ -142,8 +125,10 @@ def result_page():
     if isinstance(predicted_label, int):
         label_text = label_map.get(predicted_label, "Unknown")
         st.subheader(f"Prediction: {label_text}")
-        prob_text = probabilities[predicted_label]
-        st.write(f"Probability: {prob_text}")
+        prob_text = probabilities[predicted_label] * 100
+        st.write(f"Confidence: {prob_text:.2f}%") 
+
+
     else:
         st.write("No valid result available")
 
@@ -180,18 +165,52 @@ def result_page():
     # Display Top 5 Laws
     st.subheader("Top 5 Relevant Laws")
     laws_df = pd.DataFrame(st.session_state.top_5_laws, columns=["Law", "Score"])
-    laws_chart = alt.Chart(laws_df).mark_bar().encode(
-        x=alt.X("Score", scale=alt.Scale(domain=[0, 1])),
-        y=alt.Y("Law", sort="-x"),
-        color=alt.value("blue")
+
+    # Calculate the percentage for each slice
+    total_score = laws_df['Score'].sum()
+    laws_df['Percentage'] = (laws_df['Score'] / total_score) * 100
+
+    # Create the pie chart
+    laws_chart = alt.Chart(laws_df).mark_arc().encode(
+        theta=alt.Theta(field="Score", type="quantitative"),
+        color=alt.Color(field="Law", type="nominal", legend=alt.Legend(
+            title="Laws",
+            orient='right',
+            titleFontSize=14,
+            labelFontSize=12,
+            labelLimit=0,  # Ensure the text in the legend does not get cut off
+            symbolSize=100,
+            labelAlign='left',  # Align labels to the left
+            labelBaseline='middle',  # Vertically center the labels
+            labelPadding=10,  # Add padding between labels
+            direction='vertical',  # Arrange labels vertically
+            columns=1  # Ensure each label is on a new line
+        ),),  # Add legend with title
+        tooltip=["Law", "Score", "Percentage"],  # Tooltip displays law, score, and percentage
+        text=alt.Text(field="Percentage", type="quantitative", format=".1f")  # Display percentage on slices
+    ).properties(
+        width=500,  # Adjust chart width for a smaller size
+        height=300  # Adjust chart height for a smaller size
+    ).configure_mark(
+        opacity=0.8  # Set opacity for better visibility
+    ).configure_view(
+        stroke=None  # Remove border around the chart
+    ).configure_legend(
+        titleFontSize=14,  # Increase font size of legend title
+        labelFontSize=12,  # Increase font size of legend labels
+        orient='right',  # Position the legend on the right to give it more space
+        padding=10,  # Add padding to the legend for better spacing
+        symbolSize=100  # Adjust symbol size for legend items
     )
+    # Display the chart in Streamlit
     st.altair_chart(laws_chart, use_container_width=True)
+
 
     # Display Top 5 Words
     st.subheader("Top 5 Words Contributing to the Prediction")
     words_df = pd.DataFrame(st.session_state.top_5_words[:5], columns=["Word", "Score"])
     words_chart = alt.Chart(words_df).mark_bar().encode(
-        x=alt.X("Score", scale=alt.Scale(domain=[0, 1])),
+        x=alt.X("Score", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(tickCount=5)),
         y=alt.Y("Word", sort="-x"),
         color=alt.condition(
             alt.datum.Score > 0,
@@ -255,15 +274,17 @@ def result_page():
         if st.button("Restart", key="quit_button_result", use_container_width=True):
             st.session_state.clear()
             st.session_state.page = "Landing"
+            st.rerun()
     with col2:
-        st.download_button(
-        label="Download Result",
-        use_container_width=True,
-        key="download_button_result",
-        data=create_result_doc(),
-        file_name="result.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
+        if st.download_button(
+            label="Download Result",
+            use_container_width=True,
+            key="download_button_result",
+            data=create_result_doc(),
+            file_name="result.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ):
+            st.rerun()
 
 # Initialize session state
 if "page" not in st.session_state:
@@ -271,7 +292,6 @@ if "page" not in st.session_state:
 
 # Apply CSS
 hide_streamlit_menu_footer()
-style_buttons()
 
 # Page routing
 if st.session_state.page == "Landing":

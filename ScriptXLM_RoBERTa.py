@@ -65,9 +65,14 @@ def predict_with_top_5_laws(text):
         laws_probabilities = torch.sigmoid(laws_logits).cpu().numpy()[0]
         top_5_indices = np.argsort(laws_probabilities)[-5:][::-1]
         top_5_probs = laws_probabilities[top_5_indices]
+        
+        # Normalize the top 5 probabilities so they sum up to 1
+        top_5_probs /= top_5_probs.sum()
+        
         top_5_laws = [unique_laws[i] for i in top_5_indices]
         top_5 = list(zip(top_5_laws, top_5_probs))
     return dictum_prediction, top_5
+
 
 
 # ================================
@@ -88,6 +93,10 @@ def predict_with_top_5_words_and_sentences(text):
         laws_probabilities = torch.sigmoid(laws_logits).cpu().numpy()[0]
         top_5_indices = np.argsort(laws_probabilities)[-5:][::-1]
         top_5_probs = laws_probabilities[top_5_indices]
+
+        # Normalize top_5_probs so they sum to 1
+        top_5_probs /= top_5_probs.sum()
+
         top_5_laws = [unique_laws[i] for i in top_5_indices]
         top_5_laws_with_probs = list(zip(top_5_laws, top_5_probs))
         
@@ -107,6 +116,10 @@ def predict_with_top_5_words_and_sentences(text):
         # Sort words by attention score
         top_5_words = sorted(word_attention_pairs, key=lambda x: x[1], reverse=True)[:5]
 
+        # Normalize word_attention_scores so they sum to 1
+        total_word_attention = sum(score for _, score in top_5_words)
+        top_5_words = [(word, score / total_word_attention) for word, score in top_5_words]
+
         # Compute attention scores for sentences
         sentences = text.split(".")  # Simple sentence splitting by periods
         sentence_scores = []
@@ -120,12 +133,15 @@ def predict_with_top_5_words_and_sentences(text):
                     if token_id in token_ids
                 ])
                 sentence_scores.append((sentence.strip(), sentence_attention))
+
+        # Normalize sentence_scores so they sum to 1
+        total_sentence_attention = sum(score for _, score in sentence_scores)
+        sentence_scores = [(sentence, score / total_sentence_attention) for sentence, score in sentence_scores]
         
         # Sort sentences by attention scores
         top_3_sentences = sorted(sentence_scores, key=lambda x: x[1], reverse=True)[:3]
     
     return dictum_prediction, top_5_laws_with_probs, top_5_words, top_3_sentences
-
 
 # ================================
 # Set device (GPU if available, otherwise CPU)
